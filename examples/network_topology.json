@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {"id": "Server1", "type": "server", "cpu_load": 75},
+    {"id": "Server2", "type": "server", "cpu_load": 60},
+    {"id": "Database1", "type": "database", "cpu_load": 85},
+    {"id": "LoadBalancer", "type": "balancer", "cpu_load": 45},
+    {"id": "Client1", "type": "client", "cpu_load": 20},
+    {"id": "Client2", "type": "client", "cpu_load": 25},
+    {"id": "Client3", "type": "client", "cpu_load": 30}
+  ],
+  "edges": [
+    {"source": "Client1", "target": "LoadBalancer", "bandwidth": 100},
+    {"source": "Client2", "target": "LoadBalancer", "bandwidth": 150},
+    {"source": "Client3", "target": "LoadBalancer", "bandwidth": 120},
+    {"source": "LoadBalancer", "target": "Server1", "bandwidth": 500},
+    {"source": "LoadBalancer", "target": "Server2", "bandwidth": 450},
+    {"source": "Server1", "target": "Database1", "bandwidth": 300},
+    {"source": "Server2", "target": "Database1", "bandwidth": 280}
+  ]
+}
