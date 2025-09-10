@@ -72,22 +72,31 @@ class HistogramPlotter(BasePlotter):
         if self.group_column and self.group_column in self.data.columns:
             # Multiple histograms for groups
             groups = self.data[self.group_column].unique()
-            colors = plt.cm.tab10(np.linspace(0, 1, len(groups)))
+            # Use config colors if available
+            if self.config.color_palette and len(self.config.color_palette) > 0:
+                colors = self.config.color_palette
+            else:
+                from matplotlib import colors as mcolors
+                colors_array = plt.cm.tab10(np.linspace(0, 1, len(groups)))
+                colors = [mcolors.to_hex(c) for c in colors_array]
             
             for i, group in enumerate(groups):
                 group_data = self.data[self.data[self.group_column] == group][self.value_column].dropna()
                 
                 ax.hist(group_data, bins=self.bins, alpha=0.6, 
-                       color=colors[i], label=str(group),
+                       color=colors[i % len(colors)], label=str(group),
                        density=self.density, cumulative=self.cumulative,
                        edgecolor='black', linewidth=0.5)
         else:
             # Single histogram
+            # Use first color from palette if available
+            hist_color = self.config.color_palette[0] if self.config.color_palette and len(self.config.color_palette) > 0 else 'steelblue'
+
             n, bins, patches = ax.hist(data_to_plot, bins=self.bins, 
-                                      alpha=0.7, color='steelblue',
-                                      density=self.density, 
-                                      cumulative=self.cumulative,
-                                      edgecolor='black', linewidth=0.5)
+                                    alpha=0.7, color=hist_color,
+                                    density=self.density, 
+                                    cumulative=self.cumulative,
+                                    edgecolor='black', linewidth=0.5)
             
             # Add KDE if requested
             if self.kde and not self.cumulative:

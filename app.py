@@ -172,6 +172,16 @@ def create_plot_tab():
                                 columns
                             )
                             
+                # optional group column for histogram
+                if plot_id == "statistical.histogram":
+                    group_col = st.selectbox(
+                        "Group By (optional)",
+                        ["None"] + columns,
+                        help="Select a column to create grouped histograms"
+                    )
+                    if group_col != "None":
+                        params['group_column'] = group_col
+                                    
                 # special options for heatmap            
                 if plot_id == "statistical.heatmap":
                     use_correlation = st.checkbox("Calculate Correlation Matrix", value=True)
@@ -215,7 +225,11 @@ def create_plot(plot_id: str, params: dict):
             elif 'x_column' in params and 'y_column' in params:
                 plotter.set_columns(params['x_column'], params['y_column'])
             elif 'value_column' in params:
-                plotter.set_columns(params['value_column'])
+                # For histogram with optional group column
+                if plot_id == "statistical.histogram" and 'group_column' in params:
+                    plotter.set_columns(params['value_column'], params['group_column'])
+                else:
+                    plotter.set_columns(params['value_column'])
             elif 'value_columns' in params:
                 plotter.set_columns(params['value_columns'])
                 # For heatmap, also set correlation if present
