@@ -85,16 +85,23 @@ class ScatterPlotter(BasePlotter):
                                    alpha=self.config.alpha, cmap='viridis')
                 plt.colorbar(scatter, ax=ax, label=self.color_column)
             else:
-                # Categorical color
+                # Categorical color - use config colors if available
                 categories = self.data[self.color_column].unique()
-                colors = plt.cm.tab10(np.linspace(0, 1, len(categories)))
+                if self.config.color_palette and len(self.config.color_palette) > 0:
+                    colors = self.config.color_palette
+                else:
+                    from matplotlib import colors as mcolors
+                    colors_array = plt.cm.tab10(np.linspace(0, 1, len(categories)))
+                    colors = [mcolors.to_hex(c) for c in colors_array]
                 
                 for i, cat in enumerate(categories):
                     mask = self.data[self.color_column] == cat
                     ax.scatter(x[mask], y[mask], s=sizes if isinstance(sizes, (int, float)) else sizes[mask],
-                             color=colors[i], alpha=self.config.alpha, label=cat)
+                             color=colors[i % len(colors)], alpha=self.config.alpha, label=cat)
         else:
-            ax.scatter(x, y, s=sizes, alpha=self.config.alpha)
+            # Use first color from palette if available
+            scatter_color = self.config.color_palette[0] if self.config.color_palette and len(self.config.color_palette) > 0 else None
+            ax.scatter(x, y, s=sizes, alpha=self.config.alpha, color=scatter_color)
         
         # Add regression line if requested
         if self.fit_line:
