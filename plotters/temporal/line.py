@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, Optional, List
 from core.base_plotter import BasePlotter, PlotConfig
+from matplotlib import colors as mcolors
 
 
 class LinePlotter(BasePlotter):
@@ -42,10 +43,16 @@ class LinePlotter(BasePlotter):
         self.y_columns = y_columns if isinstance(y_columns, list) else [y_columns]
     
     def set_styles(self, colors: Optional[List[str]] = None, 
-                  line_styles: Optional[List[str]] = None,
-                  markers: Optional[List[str]] = None):
+                line_styles: Optional[List[str]] = None,
+                markers: Optional[List[str]] = None):
         """Set line styles."""
-        self.colors = colors or plt.cm.tab10(np.linspace(0, 1, len(self.y_columns)))
+        if colors is not None:
+            self.colors = colors
+        else:
+            # Convert colormap to list of hex colors
+            cmap_colors = plt.cm.tab10(np.linspace(0, 1, len(self.y_columns)))
+            self.colors = [mcolors.to_hex(c) for c in cmap_colors]
+        
         self.line_styles = line_styles or ['-'] * len(self.y_columns)
         self.markers = markers or [''] * len(self.y_columns)
     
@@ -61,24 +68,28 @@ class LinePlotter(BasePlotter):
                             if pd.api.types.is_numeric_dtype(self.data[col])]
         
         # Set default styles if not set
-        if not self.colors:
+        if self.colors is None:
             self.set_styles()
+        
+        # Override with config colors if available
+        if self.config.color_palette and len(self.config.color_palette) > 0:
+            self.colors = self.config.color_palette
         
         # Plot each series
         for i, y_col in enumerate(self.y_columns):
-            color = self.colors[i] if i < len(self.colors) else None
+            color = self.colors[i % len(self.colors)] if self.colors is not None and len(self.colors) > 0 else None
             linestyle = self.line_styles[i] if self.line_styles and i < len(self.line_styles) else '-'
             marker = self.markers[i] if self.markers and i < len(self.markers) else ''
             
             ax.plot(self.data[self.x_column], 
-                   self.data[y_col],
-                   label=y_col,
-                   color=color,
-                   linestyle=linestyle,
-                   marker=marker,
-                   linewidth=self.config.line_width,
-                   markersize=self.config.marker_size,
-                   alpha=self.config.alpha)
+                self.data[y_col],
+                label=y_col,
+                color=color,
+                linestyle=linestyle,
+                marker=marker,
+                linewidth=self.config.line_width,
+                markersize=self.config.marker_size,
+                alpha=self.config.alpha)
         
         # Rotate x labels if dates
         if pd.api.types.is_datetime64_any_dtype(self.data[self.x_column]):
@@ -88,7 +99,7 @@ class LinePlotter(BasePlotter):
         self.axes = ax
         
         return fig, ax
-    
+
     @classmethod
     def get_required_params(cls):
         """Get required parameters."""

@@ -44,6 +44,13 @@ def get_palette(name: str, n_colors: int = None):
     Returns:
         List of hex color codes
     """
+    # Handle custom palette from session state
+    if name == 'custom':
+        import streamlit as st
+        if 'custom_colors' in st.session_state:
+            return st.session_state.custom_colors
+        return COLORBLIND_SAFE['default']
+    
     # Check all palette dictionaries
     all_palettes = {
         **COLORBLIND_SAFE,

@@ -10,6 +10,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import settings
+from config import palettes
 from core.base_plotter import PlotConfig
 from utils.data_loader import DataLoader
 
@@ -32,6 +33,10 @@ if 'current_plot' not in st.session_state:
     st.session_state.current_plot = None
 if 'plot_config' not in st.session_state:
     st.session_state.plot_config = PlotConfig()
+if 'selected_palette' not in st.session_state:
+    st.session_state.selected_palette = 'default'
+if 'plotter_instance' not in st.session_state:
+    st.session_state.plotter_instance = None
 
 def main():
     """Main application function."""
@@ -58,9 +63,27 @@ def main():
         
         # Or use sample data
         st.divider()
-        if st.button("📝 Use Sample Data"):
-            st.session_state.data = DataLoader.generate_sample_data('line', 100)
-            st.success("✅ Sample data loaded")
+        st.subheader("📝 Sample Datasets")
+        
+        sample_options = {
+            "Time Series": "examples/time_series.csv",
+            "Distribution": "examples/distribution_data.csv",
+            "Categorical": "examples/categorical_data.csv",
+            "Correlation": "examples/correlation_data.csv",
+            "Scaling": "examples/scaling_data.csv"
+        }
+        
+        selected_sample = st.selectbox("Choose sample dataset", list(sample_options.keys()))
+        
+        if st.button("Load Sample Data"):
+            try:
+                sample_path = sample_options[selected_sample]
+                st.session_state.data = DataLoader.load_file(sample_path)
+                st.success(f"✅ Loaded {selected_sample} data")
+            except Exception as e:
+                # Fallback to generated data
+                st.session_state.data = DataLoader.generate_sample_data('line', 100)
+                st.success("✅ Generated sample data")
         
         # Data preview
         if st.session_state.data is not None:
@@ -167,6 +190,9 @@ def create_plot_tab():
 def create_plot(plot_id: str, params: dict):
     """Create a plot with given parameters."""
     try:
+        # Color palette is already set in plot_config during customization
+        # No need to apply it here
+        
         # Create plotter instance
         plotter = plot_registry.create_plot(
             plot_id, 
@@ -175,11 +201,18 @@ def create_plot(plot_id: str, params: dict):
         )
         
         if plotter:
-            # Set columns
+            # Store plotter instance for later customization
+            st.session_state.plotter_instance = plotter
+            
+            # Set columns based on plot type
             if 'x_column' in params and 'y_columns' in params:
                 plotter.set_columns(params['x_column'], params['y_columns'])
             elif 'x_column' in params and 'y_column' in params:
                 plotter.set_columns(params['x_column'], params['y_column'])
+            elif 'value_column' in params:
+                plotter.set_columns(params['value_column'])
+            elif 'value_columns' in params:
+                plotter.set_columns(params['value_columns'])
             
             # Create plot
             fig, ax = plotter.plot()
@@ -189,11 +222,12 @@ def create_plot(plot_id: str, params: dict):
             st.error(f"Failed to create plot: {plot_id}")
     except Exception as e:
         st.error(f"Error creating plot: {str(e)}")
-
+        
 def customize_plot_tab():
     """Create the customization tab."""
     st.subheader("🎨 Plot Customization")
     
+    # First row: Labels and Colors
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -207,31 +241,161 @@ def customize_plot_tab():
         st.session_state.plot_config.ylabel = ylabel
     
     with col2:
+            st.write("**Color Palettes**")
+            
+            # Get all palette categories
+            all_palettes = palettes.get_all_palette_names()
+            
+            # Add Custom option to the categories
+            palette_options = list(all_palettes.keys()) + ["Custom"]
+            
+            # Select palette category
+            palette_category = st.selectbox(
+                "Palette Type",
+                palette_options
+            )
+            
+            # Handle custom colors differently
+            if palette_category == "Custom":
+                # Initialize custom colors in session state if not present
+                if 'custom_colors' not in st.session_state:
+                    st.session_state.custom_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+                
+                # Color pickers for custom palette
+                st.write("Choose your colors:")
+                custom_colors = []
+                cols = st.columns(5)
+                for i, col in enumerate(cols):
+                    with col:
+                        color = col.color_picker(f"C{i+1}", 
+                                                st.session_state.custom_colors[i] if i < len(st.session_state.custom_colors) else '#000000',
+                                                key=f"color_{i}")
+                        custom_colors.append(color)
+                
+                st.session_state.custom_colors = custom_colors
+                st.session_state.selected_palette = 'custom'
+                st.session_state.plot_config.color_palette = custom_colors
+                colors_to_preview = custom_colors
+            else:
+                # Select specific palette from category
+                palette_name = st.selectbox(
+                    "Color Scheme",
+                    all_palettes[palette_category]
+                )
+                
+                st.session_state.selected_palette = palette_name
+                colors_to_preview = palettes.get_palette(palette_name, 7)
+                st.session_state.plot_config.color_palette = colors_to_preview
+            
+            # Show unified preview for both predefined and custom
+            st.write("**Preview:**")
+            color_html = " ".join([
+                f'<span style="background-color:{c};padding:4px 12px;margin:1px;display:inline-block;border-radius:3px">&nbsp;</span>'
+                for c in colors_to_preview[:7]
+            ])
+            st.markdown(color_html, unsafe_allow_html=True)
+    
+    with col3:
+        st.write("**Style Options**")
+        grid = st.checkbox("Show Grid", st.session_state.plot_config.grid)
+        legend = st.checkbox("Show Legend", st.session_state.plot_config.legend)
+        
+        legend_loc = st.selectbox(
+            "Legend Location",
+            ["best", "upper right", "upper left", "lower left", "lower right", 
+             "right", "center left", "center right", "lower center", "upper center", "center"],
+            index=0
+        )
+        
+        st.session_state.plot_config.grid = grid
+        st.session_state.plot_config.legend = legend
+        st.session_state.plot_config.legend_loc = legend_loc
+    
+    # Second row: Dimensions and Typography
+    st.divider()
+    col4, col5, col6 = st.columns(3)
+    
+    with col4:
         st.write("**Dimensions**")
-        width = st.slider("Width (inches)", 2.0, 10.0, 
-                         st.session_state.plot_config.figsize[0])
+        width = st.slider("Width (inches)", 2.0, 10.0,
+                        float(st.session_state.plot_config.figsize[0]), step=0.1)
         height = st.slider("Height (inches)", 2.0, 10.0,
-                          st.session_state.plot_config.figsize[1])
+                        float(st.session_state.plot_config.figsize[1]), step=0.1)
         dpi = st.slider("DPI", 100, 600, st.session_state.plot_config.dpi)
         
         st.session_state.plot_config.figsize = (width, height)
         st.session_state.plot_config.dpi = dpi
     
-    with col3:
-        st.write("**Style**")
-        grid = st.checkbox("Show Grid", st.session_state.plot_config.grid)
-        legend = st.checkbox("Show Legend", st.session_state.plot_config.legend)
+    with col5:
+        st.write("**Typography**")
         font_size = st.slider("Font Size", 6, 20, 
                              st.session_state.plot_config.font_size)
+        line_width = st.slider("Line Width", 0.5, 5.0, 
+                               st.session_state.plot_config.line_width, step=0.5)
+        marker_size = st.slider("Marker Size", 2, 20,
+                               int(st.session_state.plot_config.marker_size))
         
-        st.session_state.plot_config.grid = grid
-        st.session_state.plot_config.legend = legend
         st.session_state.plot_config.font_size = font_size
+        st.session_state.plot_config.line_width = line_width
+        st.session_state.plot_config.marker_size = marker_size
+    
+    with col6:
+        st.write("**Advanced**")
+        alpha = st.slider("Transparency", 0.1, 1.0, 
+                         st.session_state.plot_config.alpha, step=0.1)
+        
+        # Style presets
+        style_preset = st.selectbox(
+            "Style Preset",
+            ["Default", "IEEE", "Nature", "Science", "Minimal", "Seaborn", "ggplot"]
+        )
+        
+        st.session_state.plot_config.alpha = alpha
+        
+        if style_preset != "Default":
+            apply_style_preset(style_preset)
     
     # Apply changes button
-    if st.button("🔄 Apply Changes"):
+    if st.button("🔄 Apply Changes", type="primary"):
         if st.session_state.current_plot:
             st.success("✅ Changes applied! Recreate the plot to see updates.")
+
+def apply_style_preset(preset: str):
+    """Apply a style preset to the plot configuration."""
+    presets = {
+        "IEEE": {
+            "figsize": (3.5, 2.625),
+            "dpi": 300,
+            "font_size": 9,
+            "grid": True,
+            "legend": True,
+        },
+        "Nature": {
+            "figsize": (3.5, 3.5),
+            "dpi": 300,
+            "font_size": 8,
+            "grid": False,
+            "legend": True,
+        },
+        "Science": {
+            "figsize": (3.5, 2.8),
+            "dpi": 300,
+            "font_size": 9,
+            "grid": True,
+            "legend": True,
+        },
+        "Minimal": {
+            "figsize": (6, 4),
+            "dpi": 150,
+            "font_size": 10,
+            "grid": False,
+            "legend": False,
+        }
+    }
+    
+    if preset in presets:
+        for key, value in presets[preset].items():
+            setattr(st.session_state.plot_config, key, value)
 
 def export_plot_tab():
     """Create the export tab."""
@@ -255,8 +419,20 @@ def export_plot_tab():
             transparent = st.checkbox("Transparent Background", False)
         
         if st.button("📥 Export Plot", type="primary"):
-            # Here we would implement the actual export
-            st.success(f"✅ Plot exported as {filename}.{settings.EXPORT_FORMATS[format_option]['extension']}")
+            try:
+                from core.exporters import PlotExporter
+                ext = settings.EXPORT_FORMATS[format_option]['extension']
+                path = PlotExporter.export(
+                    st.session_state.current_plot,
+                    filename,
+                    format=ext.replace('.', ''),
+                    dpi=export_dpi,
+                    transparent=transparent
+                )
+                st.success(f"✅ Plot exported as {filename}{ext}")
+                st.info(f"Saved to: {path}")
+            except Exception as e:
+                st.error(f"Export failed: {str(e)}")
     else:
         st.info("Please create a plot first before exporting")
 
@@ -281,6 +457,15 @@ def help_tab():
     - Scatter Plot: Relationship between variables
     - Histogram: Distribution of values
     - Box Plot: Statistical summary
+    - Heatmap: Correlation matrices
+    
+    ### Color Palettes
+    
+    **Colorblind Safe**: Optimized for accessibility
+    **Scientific Journals**: Nature, Science, IEEE standards
+    **Categorical**: For discrete categories
+    **Sequential**: For continuous values
+    **Diverging**: For data with a meaningful center
     
     ### Tips for Publication-Quality Plots
     
