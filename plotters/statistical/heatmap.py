@@ -61,7 +61,7 @@ class HeatmapPlotter(BasePlotter):
             else:
                 # Use all numeric columns
                 numeric_cols = [col for col in self.data.columns 
-                              if pd.api.types.is_numeric_dtype(self.data[col])]
+                            if pd.api.types.is_numeric_dtype(self.data[col])]
                 numeric_data = self.data[numeric_cols]
             
             matrix = numeric_data.corr()
@@ -74,15 +74,23 @@ class HeatmapPlotter(BasePlotter):
             else:
                 # Try to use all numeric columns
                 numeric_cols = [col for col in self.data.columns 
-                              if pd.api.types.is_numeric_dtype(self.data[col])]
+                            if pd.api.types.is_numeric_dtype(self.data[col])]
                 if numeric_cols:
                     matrix = self.data[numeric_cols]
                 else:
                     matrix = self.data
         
+        # Determine colormap to use
+        if self.config.color_palette and len(self.config.color_palette) > 1:
+            from matplotlib.colors import LinearSegmentedColormap
+            # Create custom colormap from palette colors
+            cmap_to_use = LinearSegmentedColormap.from_list('custom', self.config.color_palette)
+        else:
+            cmap_to_use = self.cmap
+        
         # Create heatmap
-        im = ax.imshow(matrix, cmap=self.cmap, aspect='auto',
-                      vmin=self.vmin, vmax=self.vmax)
+        im = ax.imshow(matrix, cmap=cmap_to_use, aspect='auto',
+                    vmin=self.vmin, vmax=self.vmax)
         
         # Set ticks
         ax.set_xticks(np.arange(len(matrix.columns)))
@@ -104,9 +112,9 @@ class HeatmapPlotter(BasePlotter):
                     value = matrix.iloc[i, j]
                     if not pd.isna(value):
                         text = ax.text(j, i, format(value, self.fmt),
-                                     ha="center", va="center",
-                                     color="white" if abs(value) > 0.5 else "black",
-                                     fontsize=8)
+                                    ha="center", va="center",
+                                    color="white" if abs(value) > 0.5 else "black",
+                                    fontsize=8)
         
         # Adjust layout to prevent label cutoff
         plt.tight_layout()

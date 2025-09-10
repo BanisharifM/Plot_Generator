@@ -34,6 +34,18 @@ DIVERGING = {
     'rdylgn': ['#a50026', '#d73027', '#f46d43', '#fdae61', '#fee08b', '#d9ef8b', '#a6d96a', '#66bd63', '#1a9850', '#006837'],
 }
 
+# Heatmap-specific colormaps
+HEATMAP_PALETTES = {
+    'diverging_rb': ['#053061', '#2166ac', '#4393c3', '#92c5de', '#d1e5f0', '#f7f7f7', '#fddbc7', '#f4a582', '#d6604d', '#b2182b', '#67001f'],
+    'diverging_bg': ['#762a83', '#9970ab', '#c2a5cf', '#e7d4e8', '#f7f7f7', '#d9f0d3', '#a6dba0', '#5aae61', '#1b7837'],
+    'sequential_heat': ['#ffffcc', '#ffeda0', '#fed976', '#feb24c', '#fd8d3c', '#fc4e2a', '#e31a1c', '#bd0026', '#800026'],
+    'sequential_cool': ['#f7fcf0', '#e0f3db', '#ccebc5', '#a8ddb5', '#7bccc4', '#4eb3d3', '#2b8cbe', '#0868ac', '#084081'],
+    'viridis': ['#440154', '#482878', '#3e4989', '#31688e', '#26828e', '#1f9e89', '#35b779', '#6ece58', '#b5de2b', '#fde725'],
+    'plasma': ['#0d0887', '#46039f', '#7201a8', '#9c179e', '#bd3786', '#d8576b', '#ed7953', '#fb9f3a', '#fdca26', '#f0f921'],
+    'temperature': ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026'],
+    'earth': ['#1a3620', '#2d5016', '#4a7c1e', '#73af48', '#a2d489', '#c8e4b5', '#e7f5de', '#faf0d4', '#e8c58b', '#d19c4c', '#a57328'],
+}
+
 def get_palette(name: str, n_colors: int = None):
     """Get a color palette by name.
     
@@ -58,6 +70,7 @@ def get_palette(name: str, n_colors: int = None):
         **CATEGORICAL,
         **SEQUENTIAL,
         **DIVERGING,
+        **HEATMAP_PALETTES,
     }
     
     if name in all_palettes:
@@ -84,4 +97,5 @@ def get_all_palette_names():
         'Categorical': list(CATEGORICAL.keys()),
         'Sequential': list(SEQUENTIAL.keys()),
         'Diverging': list(DIVERGING.keys()),
+        'Heatmap Colors': list(HEATMAP_PALETTES.keys()),
     }

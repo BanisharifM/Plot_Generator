@@ -171,7 +171,12 @@ def create_plot_tab():
                                 param.replace('_', ' ').title(),
                                 columns
                             )
-                
+                            
+                # special options for heatmap            
+                if plot_id == "statistical.heatmap":
+                    use_correlation = st.checkbox("Calculate Correlation Matrix", value=True)
+                    params['correlation'] = use_correlation
+     
                 # Create plot button
                 if st.button("🎨 Create Plot", type="primary"):
                     create_plot(plot_id, params)
@@ -213,6 +218,9 @@ def create_plot(plot_id: str, params: dict):
                 plotter.set_columns(params['value_column'])
             elif 'value_columns' in params:
                 plotter.set_columns(params['value_columns'])
+                # For heatmap, also set correlation if present
+                if plot_id == "statistical.heatmap" and 'correlation' in params:
+                    plotter.set_heatmap_params(correlation=params['correlation'])
             
             # Create plot
             fig, ax = plotter.plot()

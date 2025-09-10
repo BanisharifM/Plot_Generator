@@ -96,10 +96,16 @@ class BoxPlotter(BasePlotter):
                        flierprops=dict(marker='o', markerfacecolor='red', 
                                      markersize=5, alpha=0.5))
         
-        # Color boxes
-        colors = plt.cm.Set3(np.linspace(0, 1, len(bp['boxes'])))
-        for patch, color in zip(bp['boxes'], colors):
-            patch.set_facecolor(color)
+        # Color boxes using config palette if available
+        if self.config.color_palette and len(self.config.color_palette) > 0:
+            colors = self.config.color_palette
+        else:
+            colors_array = plt.cm.Set3(np.linspace(0, 1, len(bp['boxes'])))
+            from matplotlib import colors as mcolors
+            colors = [mcolors.to_hex(c) for c in colors_array]
+
+        for i, patch in enumerate(bp['boxes']):
+            patch.set_facecolor(colors[i % len(colors)])
         
         # Add grid
         ax.grid(True, alpha=0.3, axis='y' if vert else 'x')
