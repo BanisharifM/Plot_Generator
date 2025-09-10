@@ -5,14 +5,13 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, Optional
 from core.base_plotter import BasePlotter, PlotConfig
-from core.plot_registry import plot_registry
 
 
-@plot_registry.register("statistical", "scatter")
 class ScatterPlotter(BasePlotter):
     """Create scatter plots for statistical analysis."""
     
     name = "Scatter Plot"
+    category = "statistical"
     description = "Visualize relationships between two continuous variables"
     required_columns = 2
     supports_multiple_series = True

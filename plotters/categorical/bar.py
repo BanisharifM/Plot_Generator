@@ -5,14 +5,13 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, Optional, List
 from core.base_plotter import BasePlotter, PlotConfig
-from core.plot_registry import plot_registry
 
 
-@plot_registry.register("categorical", "bar")
 class BarPlotter(BasePlotter):
     """Create bar charts for categorical data."""
     
     name = "Bar Chart"
+    category = "categorical"
     description = "Compare values across categories"
     required_columns = 2
     supports_multiple_series = True

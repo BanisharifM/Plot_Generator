@@ -10,10 +10,12 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import settings
-from core.plot_registry import plot_registry
 from core.base_plotter import PlotConfig
 from utils.data_loader import DataLoader
-from core.exporters import PlotExporter
+
+# Import plotters to register them
+import plotters
+from core.plot_registry import plot_registry
 
 # Page config
 st.set_page_config(

@@ -5,14 +5,13 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, Optional, List
 from core.base_plotter import BasePlotter, PlotConfig
-from core.plot_registry import plot_registry
 
 
-@plot_registry.register("temporal", "line")
 class LinePlotter(BasePlotter):
     """Create line plots for temporal data."""
     
     name = "Line Plot"
+    category = "temporal"
     description = "Display trends over time or continuous data"
     required_columns = 1
     supports_multiple_series = True
