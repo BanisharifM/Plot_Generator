@@ -6,3 +6,4 @@ scipy>=1.11.0     # histogram KDE, scatter regression
 pyarrow>=15.0     # parquet upload support (was only transitive before)
 openpyxl>=3.1.0   # .xlsx
 xlrd>=2.0.0       # legacy .xls
+duckdb>=1.0       # in-place SQL over CSV/Parquet (data layer)

@@ -12,6 +12,7 @@ from config import settings
 from config import palettes
 from core.base_plotter import PlotConfig
 from utils.data_loader import DataLoader
+from core.data_source import DataSource, is_safe_local_path, ROW_LIMIT
 
 # Import plotters to register them
 import plotters  # noqa: F401  (side effect: registers all plotters)
@@ -26,8 +27,8 @@ st.set_page_config(
 )
 
 # Initialize session state
-if 'data' not in st.session_state:
-    st.session_state.data = None
+if 'source' not in st.session_state:
+    st.session_state.source = None
 if 'current_plot' not in st.session_state:
     st.session_state.current_plot = None
 if 'plot_config' not in st.session_state:
@@ -44,13 +45,14 @@ if 'cfg_width' not in st.session_state:
     st.session_state.cfg_grid = _c.grid
     st.session_state.cfg_legend = _c.legend
 
-@st.cache_data(show_spinner=False)
-def _load_uploaded_cached(filename: str, content: bytes):
-    """Parse an upload once per (name, bytes) instead of on every rerun."""
-    import io
-    buffer = io.BytesIO(content)
-    buffer.name = filename
-    return DataLoader.load_uploaded_file(buffer)
+@st.cache_resource(show_spinner="Preparing data (converting to Parquet)...")
+def _source_from_upload(filename: str, content: bytes) -> DataSource:
+    return DataSource.from_upload(filename, content)
+
+
+@st.cache_resource(show_spinner="Preparing data...")
+def _source_from_path(path: str) -> DataSource:
+    return DataSource(path)
 
 
 def main():
@@ -72,11 +74,29 @@ def main():
         )
         
         if uploaded_file is not None:
-            st.session_state.data = _load_uploaded_cached(
-                uploaded_file.name, uploaded_file.getvalue()
-            )
-            if st.session_state.data is not None:
-                st.success(f"✅ Loaded {len(st.session_state.data)} rows")
+            try:
+                st.session_state.source = _source_from_upload(
+                    uploaded_file.name, uploaded_file.getvalue())
+                st.success(f"✅ {st.session_state.source.n_rows:,} rows ready")
+            except Exception as e:
+                st.error(f"Could not load file: {e}")
+
+        local_path = st.text_input(
+            "…or path to a local file",
+            help="For GB-scale files: queried in place with DuckDB, never "
+                 "loaded into memory or through the browser upload."
+        )
+        if local_path:
+            from pathlib import Path as _P
+            if is_safe_local_path(local_path):
+                try:
+                    st.session_state.source = _source_from_path(
+                        str(_P(local_path).expanduser()))
+                    st.success(f"✅ {st.session_state.source.n_rows:,} rows ready")
+                except Exception as e:
+                    st.error(f"Could not open: {e}")
+            else:
+                st.error("Not a readable CSV/Parquet/Excel/JSON file")
         
         # Or use sample data
         st.divider()
@@ -95,23 +115,24 @@ def main():
         if st.button("Load Sample Data"):
             try:
                 sample_path = sample_options[selected_sample]
-                st.session_state.data = DataLoader.load_file(sample_path)
+                st.session_state.source = _source_from_path(sample_path)
                 st.success(f"✅ Loaded {selected_sample} data")
             except Exception as e:
                 st.error(f"Could not load {selected_sample}: {e}")
         
-        # Data preview
-        if st.session_state.data is not None:
+        # Data preview (sniffed from a sample - never the full file)
+        if st.session_state.source is not None:
+            src_ = st.session_state.source
             st.divider()
             st.subheader("📋 Data Preview")
-            st.write(f"Shape: {st.session_state.data.shape}")
-            st.write("Columns:", list(st.session_state.data.columns))
-            
+            st.write(f"Rows: {src_.n_rows:,} | Columns: {len(src_.columns)}")
+            st.write("Columns:", src_.columns)
+
             with st.expander("View Data"):
-                st.dataframe(st.session_state.data.head(10))
+                st.dataframe(src_.preview(10))
     
     # Main content
-    if st.session_state.data is not None:
+    if st.session_state.source is not None:
         # Create tabs
         tab1, tab2, tab3, tab4 = st.tabs(["📈 Plot", "⚙️ Customize", "💾 Export", "ℹ️ Help"])
         
@@ -170,7 +191,7 @@ def create_plot_tab():
                 
                 # Column selection
                 st.divider()
-                columns = list(st.session_state.data.columns)
+                columns = st.session_state.source.columns
                 
                 # Required parameters
                 params = {}
@@ -228,11 +249,20 @@ def create_plot(plot_id: str, params: dict):
         st.warning(f"Select at least one column for: {', '.join(empty)}")
         return
     try:
+        source = st.session_state.source
+        needed = []
+        for v in params.values():
+            needed += v if isinstance(v, list) else [v] if isinstance(v, str) else []
+        needed = [c for c in dict.fromkeys(needed) if c in source.columns]
+        # column-pruned + row-bounded: raw full files never reach matplotlib
+        df = DataLoader._infer_datetimes(source.select(needed or source.columns))
+        if source.truncated:
+            st.caption(f"⚠️ Plotting first {ROW_LIMIT:,} of {source.n_rows:,} "
+                       "rows (server-side aggregation lands in Phase 2)")
 
-        # Create plotter instance
         plotter = plot_registry.create_plot(
-            plot_id, 
-            st.session_state.data, 
+            plot_id,
+            df,
             st.session_state.plot_config
         )
         
