@@ -1,7 +1,6 @@
 """Main Streamlit application for Publication Plot Generator."""
 
 import streamlit as st
-import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 import sys
@@ -15,7 +14,7 @@ from core.base_plotter import PlotConfig
 from utils.data_loader import DataLoader
 
 # Import plotters to register them
-import plotters
+import plotters  # noqa: F401  (side effect: registers all plotters)
 from core.plot_registry import plot_registry
 
 # Page config
@@ -464,8 +463,13 @@ def export_plot_tab():
                     dpi=export_dpi,
                     transparent=transparent
                 )
-                st.success(f"✅ Plot exported as {filename}{ext}")
-                st.info(f"Saved to: {path}")
+                st.success(f"✅ Plot exported as {path.name}")
+                st.caption(f"Saved to: {path}")
+                st.download_button(
+                    "⬇️ Download",
+                    data=path.read_bytes(),
+                    file_name=path.name,
+                )
             except Exception as e:
                 st.error(f"Export failed: {str(e)}")
     else:

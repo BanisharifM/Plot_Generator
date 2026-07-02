@@ -1,7 +1,6 @@
 """Data loading utilities."""
 
 import pandas as pd
-import json
 from pathlib import Path
 from typing import Optional, Union, Dict, Any
 import streamlit as st
@@ -42,9 +41,32 @@ class DataLoader:
         method = getattr(pd, method_name)
         
         try:
-            return method(file_path, **kwargs)
+            return cls._infer_datetimes(method(file_path, **kwargs))
         except Exception as e:
             raise ValueError(f"Error loading file: {e}")
+
+    @classmethod
+    def _infer_datetimes(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert string columns that are overwhelmingly parseable dates.
+
+        CSV/Excel deliver dates as plain strings; without this the temporal
+        plots treat them as unordered categorical ticks. Conservative:
+        requires >=95% of a sample to parse, and skips numeric-looking
+        columns (ids, zip codes) which are not dates.
+        """
+        for col in df.columns:
+            if not (pd.api.types.is_object_dtype(df[col])
+                    or pd.api.types.is_string_dtype(df[col])):
+                continue
+            sample = df[col].dropna().iloc[:1000]
+            if sample.empty:
+                continue
+            if pd.to_numeric(sample, errors='coerce').notna().mean() > 0.5:
+                continue
+            parsed = pd.to_datetime(sample, errors='coerce', format='mixed')
+            if parsed.notna().mean() >= 0.95:
+                df[col] = pd.to_datetime(df[col], errors='coerce', format='mixed')
+        return df
     
     @classmethod
     def load_uploaded_file(cls, uploaded_file) -> Optional[pd.DataFrame]:
@@ -63,16 +85,17 @@ class DataLoader:
             suffix = Path(uploaded_file.name).suffix.lower()
             
             if suffix == '.csv':
-                return pd.read_csv(uploaded_file)
+                df = pd.read_csv(uploaded_file)
             elif suffix in ['.xlsx', '.xls']:
-                return pd.read_excel(uploaded_file)
+                df = pd.read_excel(uploaded_file)
             elif suffix == '.json':
-                return pd.read_json(uploaded_file)
+                df = pd.read_json(uploaded_file)
             elif suffix == '.parquet':
-                return pd.read_parquet(uploaded_file)
+                df = pd.read_parquet(uploaded_file)
             else:
                 st.error(f"Unsupported file format: {suffix}")
                 return None
+            return cls._infer_datetimes(df)
                 
         except Exception as e:
             st.error(f"Error loading file: {e}")

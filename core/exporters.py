@@ -2,7 +2,6 @@
 
 import matplotlib.pyplot as plt
 from pathlib import Path
-from typing import Optional, Dict, Any
 
 
 class PlotExporter:
@@ -32,9 +31,12 @@ class PlotExporter:
         from config import settings
         export_dir = settings.EXPORTS_DIR
         export_dir.mkdir(exist_ok=True)
-        
-        # Create full path
-        file_path = export_dir / f"{filename}.{format}"
+
+        # Sanitize: the name comes from user input; strip directories and
+        # anything that could escape the exports directory
+        import re
+        safe = re.sub(r'[^\w.\- ]', '_', Path(filename).name).strip('. ') or 'plot'
+        file_path = export_dir / f"{safe}.{format}"
         
         # Export figure
         figure.savefig(
