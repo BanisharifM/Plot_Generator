@@ -12,7 +12,7 @@ from config import settings
 from config import palettes
 from core.base_plotter import PlotConfig
 from utils.data_loader import DataLoader
-from core.data_source import DataSource, is_safe_local_path, ROW_LIMIT
+from core.data_source import DataSource, is_safe_local_path
 
 # Import plotters to register them
 import plotters  # noqa: F401  (side effect: registers all plotters)
@@ -250,15 +250,12 @@ def create_plot(plot_id: str, params: dict):
         return
     try:
         source = st.session_state.source
-        needed = []
-        for v in params.values():
-            needed += v if isinstance(v, list) else [v] if isinstance(v, str) else []
-        needed = [c for c in dict.fromkeys(needed) if c in source.columns]
-        # column-pruned + row-bounded: raw full files never reach matplotlib
-        df = DataLoader._infer_datetimes(source.select(needed or source.columns))
-        if source.truncated:
-            st.caption(f"⚠️ Plotting first {ROW_LIMIT:,} of {source.n_rows:,} "
-                       "rows (server-side aggregation lands in Phase 2)")
+        # per-chart server-side reduction: the chart reflects ALL rows
+        from core.reductions import reduce_for_plot
+        df, caption = reduce_for_plot(source, plot_id, params)
+        df = DataLoader._infer_datetimes(df)
+        if caption:
+            st.caption(f"ℹ️ {caption}")
 
         plotter = plot_registry.create_plot(
             plot_id,
