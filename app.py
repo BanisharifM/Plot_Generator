@@ -137,8 +137,14 @@ def main():
             st.write(f"Rows: {src_.n_rows:,} | Columns: {len(src_.columns)}")
             st.write("Columns:", src_.columns)
 
-            with st.expander("View Data"):
-                st.dataframe(src_.preview(10))
+            with st.expander("Browse full data"):
+                psize = st.selectbox("Rows per page", [100, 1000, 10000], index=1)
+                pages = max(1, -(-src_.n_rows // psize))
+                page = st.number_input("Page", 1, pages, 1)
+                st.dataframe(src_.page((page - 1) * psize, psize),
+                             use_container_width=True)
+                st.caption(f"rows {(page-1)*psize + 1:,}-"
+                           f"{min(page*psize, src_.n_rows):,} of {src_.n_rows:,}")
     
     # Main content
     if st.session_state.source is not None:
@@ -283,7 +289,7 @@ def create_plot_tab():
         
         # Display plot
         if st.session_state.current_plot is not None:
-            st.pyplot(st.session_state.current_plot)
+            st.pyplot(st.session_state.current_plot, use_container_width=True)
         else:
             st.info("Configure and create a plot to see preview")
 

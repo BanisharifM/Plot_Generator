@@ -86,6 +86,12 @@ class DataSource:
             f"SELECT {self._quoted(columns)} FROM {self._rel} LIMIT {int(limit)}"
         ).df()
 
+    def page(self, offset: int, limit: int = 1000):
+        """One page of the full dataset - browsing never loads the file."""
+        return self._con.execute(
+            f"SELECT * FROM {self._rel} LIMIT {int(limit)} OFFSET {int(offset)}"
+        ).df()
+
     @property
     def truncated(self) -> bool:
         return self.n_rows > ROW_LIMIT

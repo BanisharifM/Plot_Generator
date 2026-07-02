@@ -67,3 +67,11 @@ def test_is_safe_local_path(csv_path, tmp_path):
     assert not is_safe_local_path(str(tmp_path))          # a directory
     assert not is_safe_local_path("/does/not/exist.csv")
     assert not is_safe_local_path("data.txt\nrm -rf /")
+
+
+def test_page_walks_the_whole_file(csv_path):
+    ds = DataSource(str(csv_path))
+    first = ds.page(0, 100)
+    last = ds.page(ds.n_rows - 3, 100)
+    assert len(first) == 100 and len(last) == 3
+    assert list(first.columns) == ds.columns
