@@ -44,13 +44,13 @@ if 'cfg_width' not in st.session_state:
     st.session_state.cfg_legend = _c.legend
 
 @st.cache_resource(show_spinner="Preparing data (converting to Parquet)...")
-def _source_from_upload(filename: str, content: bytes) -> DataSource:
-    return DataSource.from_upload(filename, content)
+def _source_from_uploads(files: tuple) -> DataSource:
+    return DataSource.from_uploads(list(files))
 
 
 @st.cache_resource(show_spinner="Preparing data...")
-def _source_from_path(path: str) -> DataSource:
-    return DataSource(path)
+def _source_from_path(path) -> DataSource:
+    return DataSource(list(path) if isinstance(path, tuple) else path)
 
 
 def main():
@@ -65,36 +65,40 @@ def main():
         st.header("📁 Data Management")
         
         # File upload
-        uploaded_file = st.file_uploader(
-            "Upload your data file",
+        uploaded_files = st.file_uploader(
+            "Upload data file(s)",
             type=['csv', 'xlsx', 'xls', 'json', 'parquet'],
-            help="Supported formats: CSV, Excel, JSON, Parquet"
+            accept_multiple_files=True,
+            help="Select several same-schema files (e.g. a dataset split "
+                 "into parts) - they are read together as one dataset."
         )
-        
-        if uploaded_file is not None:
+
+        if uploaded_files:
             try:
-                st.session_state.source = _source_from_upload(
-                    uploaded_file.name, uploaded_file.getvalue())
-                st.success(f"✅ {st.session_state.source.n_rows:,} rows ready")
+                st.session_state.source = _source_from_uploads(
+                    tuple((f.name, f.getvalue()) for f in uploaded_files))
+                st.success(f"✅ {st.session_state.source.n_rows:,} rows ready "
+                           f"from {len(uploaded_files)} file(s)")
             except Exception as e:
-                st.error(f"Could not load file: {e}")
+                st.error(f"Could not load file(s): {e}")
 
         local_path = st.text_input(
-            "…or path to a local file",
-            help="For GB-scale files: queried in place with DuckDB, never "
-                 "loaded into memory or through the browser upload."
+            "…or local file path / glob",
+            help="GB-scale data queried in place. Globs read split datasets "
+                 "as one: /data/part-*.parquet"
         )
         if local_path:
-            from pathlib import Path as _P
-            if is_safe_local_path(local_path):
+            from core.data_source import resolve_local_paths
+            hits = resolve_local_paths(local_path)
+            if hits:
                 try:
-                    st.session_state.source = _source_from_path(
-                        str(_P(local_path).expanduser()))
-                    st.success(f"✅ {st.session_state.source.n_rows:,} rows ready")
+                    st.session_state.source = _source_from_path(tuple(hits))
+                    st.success(f"✅ {st.session_state.source.n_rows:,} rows "
+                               f"ready from {len(hits)} file(s)")
                 except Exception as e:
                     st.error(f"Could not open: {e}")
             else:
-                st.error("Not a readable CSV/Parquet/Excel/JSON file")
+                st.error("No readable CSV/Parquet/Excel/JSON files match")
         
         # Or use sample data
         st.divider()

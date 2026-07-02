@@ -31,34 +31,58 @@ _SPOOL_DIR = Path(tempfile.gettempdir()) / "plot_generator_spool"
 
 
 class DataSource:
-    """One loaded dataset, addressed by a Parquet (or CSV) file on disk."""
+    """One dataset, backed by one or MANY same-schema files on disk.
 
-    def __init__(self, path: str, original_name: str = ""):
-        self.name = original_name or Path(path).name
-        self._con = duckdb.connect()  # in-process, lazy, file stays on disk
-        p = Path(path)
-        if p.suffix.lower() == ".csv":
-            parquet = p.with_suffix(".parquet")
-            if not parquet.exists():
-                self._con.execute(
-                    f"COPY (SELECT * FROM read_csv_auto('{p}')) TO '{parquet}' "
-                    "(FORMAT PARQUET, COMPRESSION ZSTD)"
-                )
-            p = parquet
-        elif p.suffix.lower() in (".xlsx", ".xls", ".json"):
-            # small-file formats: pandas parses once, stored as parquet
-            parquet = p.with_suffix(p.suffix + ".parquet")
-            if not parquet.exists():
-                reader = pd.read_excel if p.suffix.lower() != ".json" else pd.read_json
-                reader(p).to_parquet(parquet)
-            p = parquet
-        self.path = p
-        self._rel = f"read_parquet('{self.path}')"
+    A list of paths (e.g. a dataset split into 10 parquet parts) is
+    scanned as a single table - DuckDB reads multi-file parquet natively;
+    union_by_name tolerates column-order differences between parts.
+    """
+
+    def __init__(self, path, original_name: str = ""):
+        paths = [Path(p) for p in ([path] if isinstance(path, (str, Path)) else path)]
+        self.name = original_name or (
+            paths[0].name if len(paths) == 1 else f"{paths[0].name} (+{len(paths)-1})")
+        self._con = duckdb.connect()  # in-process, lazy, files stay on disk
+        paths = [self._to_parquet(p) for p in paths]
+        self.path = paths[0] if len(paths) == 1 else paths
+        listed = ", ".join(f"'{p}'" for p in paths)
+        self._rel = f"read_parquet([{listed}], union_by_name=true)"
         self.n_rows = self._con.execute(
             f"SELECT count(*) FROM {self._rel}").fetchone()[0]
         desc = self._con.execute(f"DESCRIBE SELECT * FROM {self._rel}").fetchall()
         self.columns = [r[0] for r in desc]
         self.tags = {name: _tag(dtype) for name, dtype, *_ in desc}
+
+    def _to_parquet(self, p: Path) -> Path:
+        if p.suffix.lower() == ".csv":
+            parquet = p.with_suffix(".parquet")
+            if not parquet.exists():
+                self._con.execute(
+                    f"COPY (SELECT * FROM read_csv_auto('{p}')) TO '{parquet}' "
+                    "(FORMAT PARQUET, COMPRESSION ZSTD)")
+            return parquet
+        if p.suffix.lower() in (".xlsx", ".xls", ".json"):
+            parquet = p.with_suffix(p.suffix + ".parquet")
+            if not parquet.exists():
+                reader = pd.read_excel if p.suffix.lower() != ".json" else pd.read_json
+                reader(p).to_parquet(parquet)
+            return parquet
+        return p
+
+    @classmethod
+    def from_uploads(cls, files) -> "DataSource":
+        """files: list of (filename, bytes) - spooled once, opened as one set."""
+        import hashlib
+        _SPOOL_DIR.mkdir(exist_ok=True)
+        targets = []
+        for filename, content in files:
+            digest = hashlib.sha256(content).hexdigest()[:16]
+            t = _SPOOL_DIR / f"{digest}{Path(filename).suffix.lower()}"
+            if not t.exists():
+                t.write_bytes(content)
+            targets.append(str(t))
+        return cls(targets, original_name=files[0][0] if len(files) == 1
+                   else f"{files[0][0]} (+{len(files)-1})")
 
     @classmethod
     def from_upload(cls, filename: str, content: bytes) -> "DataSource":
@@ -97,10 +121,18 @@ class DataSource:
         return self.n_rows > ROW_LIMIT
 
 
-def is_safe_local_path(text: str) -> bool:
-    """Accept only plain existing data files for the local-path input."""
+def resolve_local_paths(text: str) -> list:
+    """Existing data files for the path input; supports globs (part-*.parquet)."""
     if not text or re.search(r"[\0\n]", text):
-        return False
-    p = Path(text).expanduser()
-    return p.is_file() and p.suffix.lower() in (
-        ".csv", ".parquet", ".xlsx", ".xls", ".json")
+        return []
+    import glob as _glob
+    expanded = str(Path(text).expanduser())
+    hits = sorted(_glob.glob(expanded)) if any(c in expanded for c in "*?[") \
+        else [expanded]
+    ok = [h for h in hits if Path(h).is_file() and Path(h).suffix.lower() in
+          (".csv", ".parquet", ".xlsx", ".xls", ".json")]
+    return ok if len(ok) == len(hits) and ok else []
+
+
+def is_safe_local_path(text: str) -> bool:
+    return bool(resolve_local_paths(text))

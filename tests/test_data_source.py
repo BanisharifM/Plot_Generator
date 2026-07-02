@@ -75,3 +75,27 @@ def test_page_walks_the_whole_file(csv_path):
     last = ds.page(ds.n_rows - 3, 100)
     assert len(first) == 100 and len(last) == 3
     assert list(first.columns) == ds.columns
+
+
+def test_split_dataset_reads_as_one(tmp_path):
+    import numpy as np
+    rng = np.random.default_rng(3)
+    parts = []
+    for i in range(3):
+        df = pd.DataFrame({"part": i, "v": rng.normal(size=1000)})
+        p = tmp_path / f"part-{i}.parquet"
+        df.to_parquet(p)
+        parts.append(str(p))
+    ds = DataSource(parts)
+    assert ds.n_rows == 3000
+    got = ds.select(["part"], limit=3000)["part"].unique()
+    assert sorted(got) == [0, 1, 2]  # rows from every file
+
+
+def test_glob_resolves_split_files(tmp_path):
+    from core.data_source import resolve_local_paths
+    for i in range(3):
+        pd.DataFrame({"a": [i]}).to_parquet(tmp_path / f"part-{i}.parquet")
+    hits = resolve_local_paths(str(tmp_path / "part-*.parquet"))
+    assert len(hits) == 3
+    assert DataSource(hits).n_rows == 3
