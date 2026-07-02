@@ -41,6 +41,14 @@ def _tag(duck_type: str) -> str:
 _SPOOL_DIR = Path(tempfile.gettempdir()) / "plot_generator_spool"
 
 
+def _keep_suffix(filename: str) -> str:
+    """Preserve the inner extension for x.parquet.age so decrypt keeps it."""
+    suffixes = Path(filename).suffixes
+    if suffixes and suffixes[-1].lower() == ".age":
+        return "".join(suffixes[-2:]).lower()
+    return Path(filename).suffix.lower()
+
+
 def _decrypt_age(path: Path) -> Path:
     """Decrypt a .age file to an owner-only temp copy (prompts Touch ID).
 
@@ -115,7 +123,7 @@ class DataSource:
         targets = []
         for filename, content in files:
             digest = hashlib.sha256(content).hexdigest()[:16]
-            t = _SPOOL_DIR / f"{digest}{Path(filename).suffix.lower()}"
+            t = _SPOOL_DIR / f"{digest}{_keep_suffix(filename)}"
             if not t.exists():
                 t.write_bytes(content)
             targets.append(str(t))
@@ -128,7 +136,7 @@ class DataSource:
         import hashlib
         _SPOOL_DIR.mkdir(exist_ok=True)
         digest = hashlib.sha256(content).hexdigest()[:16]
-        target = _SPOOL_DIR / f"{digest}{Path(filename).suffix.lower()}"
+        target = _SPOOL_DIR / f"{digest}{_keep_suffix(filename)}"
         if not target.exists():
             target.write_bytes(content)
         return cls(str(target), original_name=filename)

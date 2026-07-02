@@ -67,7 +67,7 @@ def main():
         # File upload
         uploaded_files = st.file_uploader(
             "Upload data file(s)",
-            type=['csv', 'xlsx', 'xls', 'json', 'parquet'],
+            type=['csv', 'xlsx', 'xls', 'json', 'parquet', 'age'],
             accept_multiple_files=True,
             help="Select several same-schema files (e.g. a dataset split "
                  "into parts) - they are read together as one dataset."
