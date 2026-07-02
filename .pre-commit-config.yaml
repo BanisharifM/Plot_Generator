@@ -1,0 +1,16 @@
+# Layered guard: gitleaks catches secrets, the local hook refuses real
+# data files. Install once with:  pre-commit install
+# Refresh pinned versions with:   pre-commit autoupdate
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: block-data-files
+        name: block real data files
+        entry: python scripts/check_no_data.py
+        language: system
+        pass_filenames: true

@@ -289,3 +289,14 @@ docs/_templates/
 private/
 secrets/
 credentials/
+
+# --- Real data guard (added 2026-07-02) ---
+# Never commit real datasets. examples/ overrides above keep the demo files.
+*.xlsx
+*.xls
+data/
+Plaid/
+plaid_*/
+chart_spec.json
+repro_chart.py
+!examples/**
