@@ -118,6 +118,17 @@ def main():
             except Exception as e:
                 st.error(f"Could not load {selected_sample}: {e}")
         
+        spec_file = st.file_uploader("Load a saved chart spec", type=["json"],
+                                     key="spec_upload")
+        if spec_file is not None and st.button("Apply spec"):
+            import json as _json
+            from core.spec import apply_spec
+            try:
+                apply_spec(st.session_state, _json.loads(spec_file.getvalue()))
+                st.rerun()
+            except Exception as e:
+                st.error(f"Invalid spec: {e}")
+
         # Data preview (sniffed from a sample - never the full file)
         if st.session_state.source is not None:
             src_ = st.session_state.source
@@ -171,7 +182,8 @@ def create_plot_tab():
         
         if categories:
             # Select category
-            category = st.selectbox("Select Category", categories)
+            category = st.selectbox("Select Category", categories,
+                                    key="sel_category")
             
             # Get plots in category, keeping only those the data supports
             from core.encodings import GROUP_BY_TAGS, applicable, valid_columns
@@ -184,7 +196,10 @@ def create_plot_tab():
                 return
             
             # Select plot type
-            plot_name = st.selectbox("Select Plot Type", plot_names)
+            if st.session_state.get("sel_plot") not in plot_names:
+                st.session_state.pop("sel_plot", None)
+            plot_name = st.selectbox("Select Plot Type", plot_names,
+                                     key="sel_plot")
             plot_id = f"{category}.{plot_name}"
             
             # Get plot info
@@ -217,10 +232,15 @@ def create_plot_tab():
                                     st.session_state.update({k: list(o)})
                             )
                         else:
+                            key = f"sb_{plot_id}_{param}"
+                            if key not in st.session_state:
+                                st.session_state[key] = options[
+                                    min(n_single, len(options) - 1)]
+                            if st.session_state[key] not in options:
+                                st.session_state[key] = options[0]
                             params[param] = st.selectbox(
                                 param.replace('_', ' ').title(),
-                                options,
-                                index=min(n_single, len(options) - 1)
+                                options, key=key
                             )
                             n_single += 1
                             
@@ -247,6 +267,12 @@ def create_plot_tab():
                 ready = all(v for v in params.values() if isinstance(v, list))
                 if ready:
                     create_plot(plot_id, params)
+                    from core.spec import build_spec
+                    st.download_button(
+                        "💾 Save chart spec (.json)",
+                        data=build_spec(st.session_state, plot_id, params),
+                        file_name="chart_spec.json",
+                    )
                 else:
                     st.info("Pick at least one column to render")
         else:
