@@ -15,6 +15,18 @@ import pandas as pd
 
 # BI-standard ceiling between query and chart (Superset uses 50k).
 ROW_LIMIT = 50_000
+
+_NUMERIC = ("TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT",
+            "USMALLINT", "UINTEGER", "UBIGINT", "FLOAT", "DOUBLE", "DECIMAL")
+
+
+def _tag(duck_type: str) -> str:
+    t = duck_type.upper()
+    if t.startswith(("TIMESTAMP", "DATE", "TIME")):
+        return "temporal"
+    if t.startswith(_NUMERIC):
+        return "numeric"
+    return "categorical"
 _SPOOL_DIR = Path(tempfile.gettempdir()) / "plot_generator_spool"
 
 
@@ -44,10 +56,9 @@ class DataSource:
         self._rel = f"read_parquet('{self.path}')"
         self.n_rows = self._con.execute(
             f"SELECT count(*) FROM {self._rel}").fetchone()[0]
-        self.columns = [
-            r[0] for r in self._con.execute(
-                f"DESCRIBE SELECT * FROM {self._rel}").fetchall()
-        ]
+        desc = self._con.execute(f"DESCRIBE SELECT * FROM {self._rel}").fetchall()
+        self.columns = [r[0] for r in desc]
+        self.tags = {name: _tag(dtype) for name, dtype, *_ in desc}
 
     @classmethod
     def from_upload(cls, filename: str, content: bytes) -> "DataSource":

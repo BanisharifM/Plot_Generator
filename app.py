@@ -175,9 +175,15 @@ def create_plot_tab():
             # Select category
             category = st.selectbox("Select Category", categories)
             
-            # Get plots in category
+            # Get plots in category, keeping only those the data supports
+            from core.encodings import GROUP_BY_TAGS, applicable, valid_columns
             plots = plot_registry.get_plots_in_category(category)
-            plot_names = [p.split('.')[-1] for p in plots]
+            plot_names = [p.split('.')[-1] for p in plots
+                          if applicable(st.session_state.source, p)]
+            if not plot_names:
+                st.warning("No chart in this category fits the columns of "
+                           "this dataset.")
+                return
             
             # Select plot type
             plot_name = st.selectbox("Select Plot Type", plot_names)
@@ -193,29 +199,41 @@ def create_plot_tab():
                 st.divider()
                 columns = st.session_state.source.columns
                 
-                # Required parameters
+                # Required parameters, offering only dtype-valid columns
                 params = {}
                 n_single = 0  # offset defaults so e.g. scatter isn't x-vs-x
                 for param, param_type in plot_info['required_params'].items():
                     if 'column' in param:
+                        options = valid_columns(
+                            st.session_state.source, plot_id, param)
                         if 'columns' in param:
+                            key = f"ms_{plot_id}_{param}"
                             params[param] = st.multiselect(
                                 param.replace('_', ' ').title(),
-                                columns
+                                options, key=key
+                            )
+                            st.button(
+                                f"Select all {len(options)} valid columns",
+                                key=key + "_all",
+                                on_click=lambda k=key, o=options:
+                                    st.session_state.update({k: list(o)})
                             )
                         else:
                             params[param] = st.selectbox(
                                 param.replace('_', ' ').title(),
-                                columns,
-                                index=min(n_single, len(columns) - 1)
+                                options,
+                                index=min(n_single, len(options) - 1)
                             )
                             n_single += 1
                             
                 # optional group column for histogram
                 if plot_id == "statistical.histogram":
+                    group_options = [c for c in columns
+                                     if st.session_state.source.tags.get(c)
+                                     in GROUP_BY_TAGS]
                     group_col = st.selectbox(
                         "Group By (optional)",
-                        ["None"] + columns,
+                        ["None"] + group_options,
                         help="Select a column to create grouped histograms"
                     )
                     if group_col != "None":
