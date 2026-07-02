@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple, List
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
 from dataclasses import dataclass, field
 
 

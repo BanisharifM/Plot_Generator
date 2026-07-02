@@ -3,7 +3,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional
 from core.base_plotter import BasePlotter, PlotConfig
 
 

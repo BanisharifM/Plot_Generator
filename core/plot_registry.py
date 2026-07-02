@@ -1,7 +1,6 @@
 """Dynamic plot type registration system."""
 
 from typing import Dict, List, Optional, Type
-from pathlib import Path
 
 
 class PlotRegistry:
