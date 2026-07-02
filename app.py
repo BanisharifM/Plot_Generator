@@ -37,6 +37,22 @@ if 'selected_palette' not in st.session_state:
     st.session_state.selected_palette = 'default'
 if 'plotter_instance' not in st.session_state:
     st.session_state.plotter_instance = None
+if 'cfg_width' not in st.session_state:
+    _c = st.session_state.plot_config
+    st.session_state.cfg_width, st.session_state.cfg_height = map(float, _c.figsize)
+    st.session_state.cfg_dpi = _c.dpi
+    st.session_state.cfg_font = _c.font_size
+    st.session_state.cfg_grid = _c.grid
+    st.session_state.cfg_legend = _c.legend
+
+@st.cache_data(show_spinner=False)
+def _load_uploaded_cached(filename: str, content: bytes):
+    """Parse an upload once per (name, bytes) instead of on every rerun."""
+    import io
+    buffer = io.BytesIO(content)
+    buffer.name = filename
+    return DataLoader.load_uploaded_file(buffer)
+
 
 def main():
     """Main application function."""
@@ -57,7 +73,9 @@ def main():
         )
         
         if uploaded_file is not None:
-            st.session_state.data = DataLoader.load_uploaded_file(uploaded_file)
+            st.session_state.data = _load_uploaded_cached(
+                uploaded_file.name, uploaded_file.getvalue()
+            )
             if st.session_state.data is not None:
                 st.success(f"✅ Loaded {len(st.session_state.data)} rows")
         
@@ -81,9 +99,7 @@ def main():
                 st.session_state.data = DataLoader.load_file(sample_path)
                 st.success(f"✅ Loaded {selected_sample} data")
             except Exception as e:
-                # Fallback to generated data
-                st.session_state.data = DataLoader.generate_sample_data('line', 100)
-                st.success("✅ Generated sample data")
+                st.error(f"Could not load {selected_sample}: {e}")
         
         # Data preview
         if st.session_state.data is not None:
@@ -159,6 +175,7 @@ def create_plot_tab():
                 
                 # Required parameters
                 params = {}
+                n_single = 0  # offset defaults so e.g. scatter isn't x-vs-x
                 for param, param_type in plot_info['required_params'].items():
                     if 'column' in param:
                         if 'columns' in param:
@@ -169,8 +186,10 @@ def create_plot_tab():
                         else:
                             params[param] = st.selectbox(
                                 param.replace('_', ' ').title(),
-                                columns
+                                columns,
+                                index=min(n_single, len(columns) - 1)
                             )
+                            n_single += 1
                             
                 # optional group column for histogram
                 if plot_id == "statistical.histogram":
@@ -204,10 +223,13 @@ def create_plot_tab():
 
 def create_plot(plot_id: str, params: dict):
     """Create a plot with given parameters."""
+    empty = [p for p, v in params.items()
+             if 'columns' in p and isinstance(v, list) and not v]
+    if empty:
+        st.warning(f"Select at least one column for: {', '.join(empty)}")
+        return
     try:
-        # Color palette is already set in plot_config during customization
-        # No need to apply it here
-        
+
         # Create plotter instance
         plotter = plot_registry.create_plot(
             plot_id, 
@@ -236,8 +258,10 @@ def create_plot(plot_id: str, params: dict):
                 if plot_id == "statistical.heatmap" and 'correlation' in params:
                     plotter.set_heatmap_params(correlation=params['correlation'])
             
-            # Create plot
+            # Create plot; close the previous figure so they don't accumulate
             fig, ax = plotter.plot()
+            if st.session_state.current_plot is not None:
+                plt.close(st.session_state.current_plot)
             st.session_state.current_plot = fig
             st.success("✅ Plot created successfully!")
         else:
@@ -248,7 +272,15 @@ def create_plot(plot_id: str, params: dict):
 def customize_plot_tab():
     """Create the customization tab."""
     st.subheader("🎨 Plot Customization")
-    
+
+    # Apply a preset only when the SELECTION CHANGES (not on every rerun,
+    # which silently overwrote the sliders), and before the widgets below
+    # instantiate so they display the preset's values.
+    preset = st.session_state.get('style_preset', 'Default')
+    if preset != st.session_state.get('_applied_preset'):
+        apply_style_preset(preset)
+        st.session_state._applied_preset = preset
+
     # First row: Labels and Colors
     col1, col2, col3 = st.columns(3)
     
@@ -319,8 +351,8 @@ def customize_plot_tab():
     
     with col3:
         st.write("**Style Options**")
-        grid = st.checkbox("Show Grid", st.session_state.plot_config.grid)
-        legend = st.checkbox("Show Legend", st.session_state.plot_config.legend)
+        grid = st.checkbox("Show Grid", key='cfg_grid')
+        legend = st.checkbox("Show Legend", key='cfg_legend')
         
         legend_loc = st.selectbox(
             "Legend Location",
@@ -339,19 +371,16 @@ def customize_plot_tab():
     
     with col4:
         st.write("**Dimensions**")
-        width = st.slider("Width (inches)", 2.0, 10.0,
-                        float(st.session_state.plot_config.figsize[0]), step=0.1)
-        height = st.slider("Height (inches)", 2.0, 10.0,
-                        float(st.session_state.plot_config.figsize[1]), step=0.1)
-        dpi = st.slider("DPI", 100, 600, st.session_state.plot_config.dpi)
+        width = st.slider("Width (inches)", 2.0, 10.0, step=0.1, key='cfg_width')
+        height = st.slider("Height (inches)", 2.0, 10.0, step=0.1, key='cfg_height')
+        dpi = st.slider("DPI", 100, 600, key='cfg_dpi')
         
         st.session_state.plot_config.figsize = (width, height)
         st.session_state.plot_config.dpi = dpi
     
     with col5:
         st.write("**Typography**")
-        font_size = st.slider("Font Size", 6, 20, 
-                             st.session_state.plot_config.font_size)
+        font_size = st.slider("Font Size", 6, 20, key='cfg_font')
         line_width = st.slider("Line Width", 0.5, 5.0, 
                                st.session_state.plot_config.line_width, step=0.5)
         marker_size = st.slider("Marker Size", 2, 20,
@@ -366,16 +395,14 @@ def customize_plot_tab():
         alpha = st.slider("Transparency", 0.1, 1.0, 
                          st.session_state.plot_config.alpha, step=0.1)
         
-        # Style presets
-        style_preset = st.selectbox(
+        # Style presets (applied at the top of this tab, on change only)
+        st.selectbox(
             "Style Preset",
-            ["Default", "IEEE", "Nature", "Science", "Minimal", "Seaborn", "ggplot"]
+            ["Default", "IEEE", "Nature", "Science", "Minimal", "Seaborn", "ggplot"],
+            key='style_preset'
         )
-        
+
         st.session_state.plot_config.alpha = alpha
-        
-        if style_preset != "Default":
-            apply_style_preset(style_preset)
     
     # Apply changes button
     if st.button("🔄 Apply Changes", type="primary"):
@@ -383,41 +410,27 @@ def customize_plot_tab():
             st.success("✅ Changes applied! Recreate the plot to see updates.")
 
 def apply_style_preset(preset: str):
-    """Apply a style preset to the plot configuration."""
-    presets = {
-        "IEEE": {
-            "figsize": (3.5, 2.625),
-            "dpi": 300,
-            "font_size": 9,
-            "grid": True,
-            "legend": True,
-        },
-        "Nature": {
-            "figsize": (3.5, 3.5),
-            "dpi": 300,
-            "font_size": 8,
-            "grid": False,
-            "legend": True,
-        },
-        "Science": {
-            "figsize": (3.5, 2.8),
-            "dpi": 300,
-            "font_size": 9,
-            "grid": True,
-            "legend": True,
-        },
-        "Minimal": {
-            "figsize": (6, 4),
-            "dpi": 150,
-            "font_size": 10,
-            "grid": False,
-            "legend": False,
-        }
+    """Apply a style preset.
+
+    Journal presets set dimensions/typography via the widget keys (so the
+    sliders show and keep the values); Seaborn/ggplot switch the matplotlib
+    style sheet, applied per-plot via a style context in BasePlotter.
+    """
+    dims = {
+        "IEEE": {'cfg_width': 3.5, 'cfg_height': 2.625, 'cfg_dpi': 300,
+                 'cfg_font': 9, 'cfg_grid': True, 'cfg_legend': True},
+        "Nature": {'cfg_width': 3.5, 'cfg_height': 3.5, 'cfg_dpi': 300,
+                   'cfg_font': 8, 'cfg_grid': False, 'cfg_legend': True},
+        "Science": {'cfg_width': 3.5, 'cfg_height': 2.8, 'cfg_dpi': 300,
+                    'cfg_font': 9, 'cfg_grid': True, 'cfg_legend': True},
+        "Minimal": {'cfg_width': 6.0, 'cfg_height': 4.0, 'cfg_dpi': 150,
+                    'cfg_font': 10, 'cfg_grid': False, 'cfg_legend': False},
     }
-    
-    if preset in presets:
-        for key, value in presets[preset].items():
-            setattr(st.session_state.plot_config, key, value)
+    mpl_styles = {"Seaborn": "seaborn-v0_8", "ggplot": "ggplot"}
+
+    for key, value in dims.get(preset, {}).items():
+        st.session_state[key] = value
+    st.session_state.plot_config.style = mpl_styles.get(preset, "default")
 
 def export_plot_tab():
     """Create the export tab."""
@@ -464,20 +477,16 @@ def help_tab():
     
     st.markdown("""
     ### Available Plot Types
-    
+
     **Temporal Plots**
-    - Line Plot: Display trends over time
-    - Area Plot: Show cumulative values
-    - Timeline: Event-based visualization
-    
+    - Line Plot: Display trends over time (multiple series supported)
+
     **Categorical Plots**
-    - Bar Chart: Compare values across categories
-    - Grouped Bar: Multiple series comparison
-    - Stacked Bar: Part-to-whole relationships
-    
+    - Bar Chart: Compare values across categories (auto-groups multiple series)
+
     **Statistical Plots**
     - Scatter Plot: Relationship between variables
-    - Histogram: Distribution of values
+    - Histogram: Distribution of values (optional group-by)
     - Box Plot: Statistical summary
     - Heatmap: Correlation matrices
     

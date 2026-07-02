@@ -61,11 +61,13 @@ class LinePlotter(BasePlotter):
         # Create figure
         fig, ax = plt.subplots(figsize=self.config.figsize, dpi=self.config.dpi)
         
-        # Set default columns if not set
-        if not self.x_column or not self.y_columns:
+        # Fill defaults independently so a user-chosen x survives an empty y
+        if not self.x_column:
             self.x_column = self.data.columns[0]
-            self.y_columns = [col for col in self.data.columns[1:] 
-                            if pd.api.types.is_numeric_dtype(self.data[col])]
+        if not self.y_columns:
+            self.y_columns = [col for col in self.data.columns
+                              if col != self.x_column
+                              and pd.api.types.is_numeric_dtype(self.data[col])]
         
         # Set default styles if not set
         if self.colors is None:

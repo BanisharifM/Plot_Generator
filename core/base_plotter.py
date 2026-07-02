@@ -117,23 +117,26 @@ class BasePlotter(ABC):
     
     def plot(self) -> Tuple[plt.Figure, plt.Axes]:
         """Main plotting method.
-        
+
         Returns:
             Tuple of (figure, axes)
         """
+        import contextlib
+
         # Validate data
         if not self.validate_data():
             raise ValueError(f"Invalid data for {self.name}")
-        
-        # Create plot
-        self.figure, self.axes = self.create_plot()
-        
-        # Apply styling
-        self.apply_styling()
-        
-        # Add annotations
-        self.add_annotations()
-        
+
+        # Style sheet applied as a context so it never leaks into other
+        # sessions of the same server process (rcParams are global).
+        style = self.config.style
+        ctx = (plt.style.context(style) if style and style != 'default'
+               else contextlib.nullcontext())
+        with ctx:
+            self.figure, self.axes = self.create_plot()
+            self.apply_styling()
+            self.add_annotations()
+
         return self.figure, self.axes
     
     @classmethod

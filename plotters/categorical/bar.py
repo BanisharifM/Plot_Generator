@@ -66,11 +66,13 @@ class BarPlotter(BasePlotter):
        # Create figure
        fig, ax = plt.subplots(figsize=self.config.figsize, dpi=self.config.dpi)
        
-       # Set default columns if not set
-       if not self.x_column or not self.y_columns:
+       # Fill defaults independently so a user-chosen x survives an empty y
+       if not self.x_column:
            self.x_column = self.data.columns[0]
-           self.y_columns = [col for col in self.data.columns[1:] 
-                           if pd.api.types.is_numeric_dtype(self.data[col])]
+       if not self.y_columns:
+           self.y_columns = [col for col in self.data.columns
+                             if col != self.x_column
+                             and pd.api.types.is_numeric_dtype(self.data[col])]
        
        x = np.arange(len(self.data[self.x_column]))
        colors = self.get_colors(len(self.y_columns))
@@ -116,7 +118,9 @@ class BarPlotter(BasePlotter):
                    ax.barh(x, self.data[self.y_columns[0]], self.bar_width,
                           label=self.y_columns[0], color=color)
            else:
-               # Default to grouped if multiple columns
+               # Default to grouped if multiple columns; close this figure
+               # first or the recursion leaks it
+               plt.close(fig)
                self.grouped = True
                return self.create_plot()
        
