@@ -81,10 +81,12 @@ class BoxPlotter(BasePlotter):
             labels = self.value_columns
         
         # Create box plot
+        # matplotlib 3.9 renamed labels= to tick_labels= (removed in 3.11);
+        # vert= is deprecated in favor of orientation= (added in 3.10)
         vert = self.orientation == 'vertical'
-        bp = ax.boxplot(data_to_plot, 
-                       vert=vert,
-                       labels=labels,
+        bp = ax.boxplot(data_to_plot,
+                       orientation='vertical' if vert else 'horizontal',
+                       tick_labels=labels,
                        notch=self.notch,
                        showmeans=self.show_means,
                        showfliers=self.show_outliers,
