@@ -6,7 +6,10 @@ CSV uploads are spooled to disk and converted once to Parquet (measured on a
 bounded, column-pruned DataFrames ever leave this module.
 """
 
+import hashlib
+import os
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -15,6 +18,12 @@ import pandas as pd
 
 # BI-standard ceiling between query and chart (Superset uses 50k).
 ROW_LIMIT = 50_000
+
+# age-encrypted inputs: the identity lives in the Secure Enclave (Touch ID),
+# so decryption prompts the user and the key never touches disk/env - an LLM
+# tool can read the .age ciphertext but cannot decrypt it.
+_AGE_IDENTITY = os.environ.get(
+    "PLAID_AGE_IDENTITY", str(Path.home() / ".plaid-identity.txt"))
 
 _NUMERIC = ("TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT",
             "USMALLINT", "UINTEGER", "UBIGINT", "FLOAT", "DOUBLE", "DECIMAL")
@@ -30,6 +39,30 @@ def _tag(duck_type: str) -> str:
 _SPOOL_DIR = Path(tempfile.gettempdir()) / "plot_generator_spool"
 
 
+def _decrypt_age(path: Path) -> Path:
+    """Decrypt a .age file to an owner-only temp copy (prompts Touch ID).
+
+    The working copy lives in a 0700 temp dir for the session; the data at
+    rest stays encrypted. Raises if the identity is missing or decryption
+    fails (wrong key / declined biometric).
+    """
+    _SPOOL_DIR.mkdir(exist_ok=True)
+    os.chmod(_SPOOL_DIR, 0o700)
+    inner = path.with_suffix("")  # strip .age, keep .parquet/.csv/...
+    tag = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:16]
+    out = _SPOOL_DIR / f"{tag}_{inner.name}"
+    if not out.exists():
+        if not Path(_AGE_IDENTITY).is_file():
+            raise FileNotFoundError(
+                f"age identity not found at {_AGE_IDENTITY} "
+                "(set PLAID_AGE_IDENTITY)")
+        subprocess.run(
+            ["age", "-d", "-i", _AGE_IDENTITY, "-o", str(out), str(path)],
+            check=True)
+        os.chmod(out, 0o600)
+    return out
+
+
 class DataSource:
     """One dataset, backed by one or MANY same-schema files on disk.
 
@@ -43,6 +76,8 @@ class DataSource:
         self.name = original_name or (
             paths[0].name if len(paths) == 1 else f"{paths[0].name} (+{len(paths)-1})")
         self._con = duckdb.connect()  # in-process, lazy, files stay on disk
+        paths = [_decrypt_age(p) if p.suffix.lower() == ".age" else p
+                 for p in paths]
         paths = [self._to_parquet(p) for p in paths]
         self.path = paths[0] if len(paths) == 1 else paths
         listed = ", ".join(f"'{p}'" for p in paths)
@@ -130,7 +165,7 @@ def resolve_local_paths(text: str) -> list:
     hits = sorted(_glob.glob(expanded)) if any(c in expanded for c in "*?[") \
         else [expanded]
     ok = [h for h in hits if Path(h).is_file() and Path(h).suffix.lower() in
-          (".csv", ".parquet", ".xlsx", ".xls", ".json")]
+          (".csv", ".parquet", ".xlsx", ".xls", ".json", ".age")]
     return ok if len(ok) == len(hits) and ok else []
 
 
