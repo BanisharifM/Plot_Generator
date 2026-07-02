@@ -35,8 +35,6 @@ if 'plot_config' not in st.session_state:
     st.session_state.plot_config = PlotConfig()
 if 'selected_palette' not in st.session_state:
     st.session_state.selected_palette = 'default'
-if 'plotter_instance' not in st.session_state:
-    st.session_state.plotter_instance = None
 if 'cfg_width' not in st.session_state:
     _c = st.session_state.plot_config
     st.session_state.cfg_width, st.session_state.cfg_height = map(float, _c.figsize)
@@ -244,9 +242,13 @@ def create_plot_tab():
                     use_correlation = st.checkbox("Calculate Correlation Matrix", value=True)
                     params['correlation'] = use_correlation
      
-                # Create plot button
-                if st.button("🎨 Create Plot", type="primary"):
+                # Live render: any config change re-plots immediately
+                # (cheap now - reductions run in DuckDB in milliseconds)
+                ready = all(v for v in params.values() if isinstance(v, list))
+                if ready:
                     create_plot(plot_id, params)
+                else:
+                    st.info("Pick at least one column to render")
         else:
             st.warning("No plot types available")
     
@@ -282,9 +284,6 @@ def create_plot(plot_id: str, params: dict):
         )
         
         if plotter:
-            # Store plotter instance for later customization
-            st.session_state.plotter_instance = plotter
-            
             # Set columns based on plot type
             if 'x_column' in params and 'y_columns' in params:
                 plotter.set_columns(params['x_column'], params['y_columns'])
@@ -307,7 +306,6 @@ def create_plot(plot_id: str, params: dict):
             if st.session_state.current_plot is not None:
                 plt.close(st.session_state.current_plot)
             st.session_state.current_plot = fig
-            st.success("✅ Plot created successfully!")
         else:
             st.error(f"Failed to create plot: {plot_id}")
     except Exception as e:
@@ -448,10 +446,7 @@ def customize_plot_tab():
 
         st.session_state.plot_config.alpha = alpha
     
-    # Apply changes button
-    if st.button("🔄 Apply Changes", type="primary"):
-        if st.session_state.current_plot:
-            st.success("✅ Changes applied! Recreate the plot to see updates.")
+    st.caption("Changes apply live - the plot re-renders on every change.")
 
 def apply_style_preset(preset: str):
     """Apply a style preset.
