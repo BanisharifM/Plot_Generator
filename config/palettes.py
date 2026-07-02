@@ -119,3 +119,23 @@ def get_all_palette_names():
         'Diverging': list(DIVERGING.keys()),
         'Heatmap Colors': list(HEATMAP_PALETTES.keys()),
     }
+
+# Research-backed per-chart defaults (Wong 2011; Crameri 2020; matplotlib
+# colormap guidance): Okabe-Ito for categorical series, reordered so
+# single-series charts lead with one calm blue; the heatmap manages its own
+# colormap (RdBu_r for correlation, viridis otherwise) and must never
+# interpolate a qualitative palette.
+_OI = COLORBLIND_SAFE['okabe_ito']
+_OI_BLUE_FIRST = [_OI[4], _OI[0], _OI[1], _OI[2], _OI[3], _OI[5], _OI[6]]
+DEFAULT_BY_PLOT = {
+    'temporal.line': _OI_BLUE_FIRST,
+    'categorical.bar': _OI_BLUE_FIRST,
+    'statistical.scatter': _OI_BLUE_FIRST,
+    'statistical.histogram': _OI_BLUE_FIRST,
+    'statistical.boxplot': _OI_BLUE_FIRST,
+    'statistical.heatmap': [],
+}
+
+
+def default_palette(plot_id: str) -> list:
+    return list(DEFAULT_BY_PLOT.get(plot_id, _OI_BLUE_FIRST))

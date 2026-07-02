@@ -7,6 +7,13 @@ from typing import Tuple, Optional, List
 from core.base_plotter import BasePlotter, PlotConfig
 
 
+def _is_continuous(pal) -> bool:
+    from config.palettes import DIVERGING, HEATMAP_PALETTES, SEQUENTIAL
+    cont = (list(SEQUENTIAL.values()) + list(DIVERGING.values())
+            + list(HEATMAP_PALETTES.values()))
+    return list(pal) in cont
+
+
 class HeatmapPlotter(BasePlotter):
     """Create heatmaps for correlation or matrix visualization."""
     
@@ -81,11 +88,13 @@ class HeatmapPlotter(BasePlotter):
                     matrix = self.data
         
         # Determine colormap to use
-        if self.config.color_palette and len(self.config.color_palette) > 1:
+        pal = list(self.config.color_palette or [])
+        if len(pal) > 1 and _is_continuous(pal):
             from matplotlib.colors import LinearSegmentedColormap
-            # Create custom colormap from palette colors
-            cmap_to_use = LinearSegmentedColormap.from_list('custom', self.config.color_palette)
+            cmap_to_use = LinearSegmentedColormap.from_list('custom', pal)
         else:
+            # qualitative palettes are never interpolated into gradients
+            # (matplotlib/seaborn guidance); keep the perceptual default
             cmap_to_use = self.cmap
         
         # Create heatmap

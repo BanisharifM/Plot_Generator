@@ -12,7 +12,7 @@ from config import settings
 from config import palettes
 from core.base_plotter import PlotConfig
 from utils.data_loader import DataLoader
-from core.data_source import DataSource, is_safe_local_path
+from core.data_source import DataSource
 
 # Import plotters to register them
 import plotters  # noqa: F401  (side effect: registers all plotters)
@@ -305,6 +305,9 @@ def create_plot(plot_id: str, params: dict):
         st.warning(f"Select at least one column for: {', '.join(empty)}")
         return
     try:
+        if not st.session_state.get('palette_user_set'):
+            st.session_state.plot_config.color_palette = \
+                palettes.default_palette(plot_id)
         source = st.session_state.source
         # per-chart server-side reduction: the chart reflects ALL rows
         from core.reductions import reduce_for_plot
@@ -384,7 +387,9 @@ def customize_plot_tab():
             # Select palette category
             palette_category = st.selectbox(
                 "Palette Type",
-                palette_options
+                palette_options,
+                key='pal_type',
+                on_change=lambda: st.session_state.update(palette_user_set=True)
             )
             
             # Handle custom colors differently
@@ -406,18 +411,22 @@ def customize_plot_tab():
                 
                 st.session_state.custom_colors = custom_colors
                 st.session_state.selected_palette = 'custom'
-                st.session_state.plot_config.color_palette = custom_colors
                 colors_to_preview = custom_colors
+                if st.session_state.get('palette_user_set'):
+                    st.session_state.plot_config.color_palette = custom_colors
             else:
                 # Select specific palette from category
                 palette_name = st.selectbox(
                     "Color Scheme",
-                    all_palettes[palette_category]
+                    all_palettes[palette_category],
+                    key='pal_scheme',
+                    on_change=lambda: st.session_state.update(palette_user_set=True)
                 )
                 
                 st.session_state.selected_palette = palette_name
                 colors_to_preview = palettes.get_palette(palette_name, 7)
-                st.session_state.plot_config.color_palette = colors_to_preview
+                if st.session_state.get('palette_user_set'):
+                    st.session_state.plot_config.color_palette = colors_to_preview
             
             # Show unified preview for both predefined and custom
             st.write("**Preview:**")
