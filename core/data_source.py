@@ -22,8 +22,10 @@ ROW_LIMIT = 50_000
 # age-encrypted inputs: the identity lives in the Secure Enclave (Touch ID),
 # so decryption prompts the user and the key never touches disk/env - an LLM
 # tool can read the .age ciphertext but cannot decrypt it.
-_AGE_IDENTITY = os.environ.get(
-    "PLAID_AGE_IDENTITY", str(Path.home() / ".plaid-identity.txt"))
+def _age_identity() -> str:
+    # read at call time, not import, so the env can change per session
+    return os.environ.get(
+        "PLAID_AGE_IDENTITY", str(Path.home() / ".plaid-identity.txt"))
 
 _NUMERIC = ("TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT",
             "USMALLINT", "UINTEGER", "UBIGINT", "FLOAT", "DOUBLE", "DECIMAL")
@@ -52,12 +54,13 @@ def _decrypt_age(path: Path) -> Path:
     tag = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:16]
     out = _SPOOL_DIR / f"{tag}_{inner.name}"
     if not out.exists():
-        if not Path(_AGE_IDENTITY).is_file():
+        identity = _age_identity()
+        if not Path(identity).is_file():
             raise FileNotFoundError(
-                f"age identity not found at {_AGE_IDENTITY} "
+                f"age identity not found at {identity} "
                 "(set PLAID_AGE_IDENTITY)")
         subprocess.run(
-            ["age", "-d", "-i", _AGE_IDENTITY, "-o", str(out), str(path)],
+            ["age", "-d", "-i", identity, "-o", str(out), str(path)],
             check=True)
         os.chmod(out, 0o600)
     return out
