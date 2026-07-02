@@ -14,7 +14,6 @@ Run from the Plot_Generator repo root:  python {script_name}
 Data file: {data_path}
 """
 
-import json
 import sys
 from pathlib import Path
 
@@ -30,7 +29,7 @@ from core.plot_registry import plot_registry
 from utils.data_loader import DataLoader
 import plotters  # noqa: F401  (registers plot types)
 
-SPEC = json.loads(r'''{spec}''')
+SPEC = {spec}
 
 source = DataSource(r"{data_path}")
 df, note = reduce_for_plot(source, SPEC["plot_id"], SPEC["params"])
@@ -67,7 +66,7 @@ def generate_script(spec_json: str, data_path: str,
         plot_id=plot_id,
         script_name=script_name,
         data_path=data_path,
-        spec=json.dumps({k: spec[k] for k in ("plot_id", "params", "config")},
-                        indent=4, default=str),
+        # repr() emits valid Python literals (True/None), unlike JSON text
+        spec=repr({k: spec[k] for k in ("plot_id", "params", "config")}),
         out_name=plot_id.replace(".", "_") + ".png",
     )
