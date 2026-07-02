@@ -146,7 +146,7 @@ def main():
                 pages = max(1, -(-src_.n_rows // psize))
                 page = st.number_input("Page", 1, pages, 1)
                 st.dataframe(src_.page((page - 1) * psize, psize),
-                             use_container_width=True)
+                             width="stretch")
                 st.caption(f"rows {(page-1)*psize + 1:,}-"
                            f"{min(page*psize, src_.n_rows):,} of {src_.n_rows:,}")
     
@@ -293,7 +293,7 @@ def create_plot_tab():
         
         # Display plot
         if st.session_state.current_plot is not None:
-            st.pyplot(st.session_state.current_plot, use_container_width=True)
+            st.pyplot(st.session_state.current_plot, width="stretch")
         else:
             st.info("Configure and create a plot to see preview")
 
